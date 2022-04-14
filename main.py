@@ -1,6 +1,6 @@
 import math
 import operator as op
-from functools import partial
+from functools import partial, reduce
 from itertools import chain
 import pygame
 from pygame.locals import *
@@ -20,9 +20,22 @@ fps = 0
 moves = [(K_w, K_UP), (K_s, K_DOWN), (K_a, K_LEFT), (K_d, K_RIGHT)]
 moves = {key:2**i for i in range(len(moves)) for key in moves[i]}
 
+
+bitwise_any = partial(reduce, op._or)
 def intVector(v):
   return (*map(int, map(round, v)),)
 
+
+class Flags:
+  def __init__(self, *flags):
+    self.flags = dict(zip(flags, (2**i for i in range(len(flags)))))
+  
+  def __getattr__(self, name):
+    return self[name]
+  
+  def __getitem__(self, key):
+    # test if key is iterable
+    return self.flags[key]
 
 class Player:
   def __init__(self, pos, angle):
