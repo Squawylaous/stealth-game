@@ -35,7 +35,10 @@ class Player:
     return self.angle * self.speed
   
   def input(self, key, keydown=True):
-    self.input = (op.or_ if keydown else op.xor)(self.input, key)
+    if keydown:
+      self.input |= key
+    else:
+      self.input &= ~key
   
   def move(self):
     # {1: (0, -1), 2: (0, 1), 4: (-1, 0), 8: (1, 0)}
