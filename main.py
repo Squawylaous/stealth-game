@@ -1,3 +1,4 @@
+import math
 import operator as op
 from functools import partial
 from itertools import chain
@@ -16,9 +17,8 @@ screen_rect = screen.get_rect()
 update_rects = [[]]
 fps = 0
 
-group_dict = lambda d:{i:v for k, v in d.items() for i in k}
-
-directions = group_dict({(K_w, K_UP, 1):(0, -1), (K_s, K_DOWN, 2):(0, 1), (K_a, K_LEFT, 4):(-1 ,0), (K_d, K_RIGHT, 8):(1, 0)})
+moves = [(K_w, K_UP), (K_s, K_DOWN), (K_a, K_LEFT), (K_d, K_RIGHT)]
+moves = {key:2**i for i in range(len(moves)) for key in moves[i]}
 
 def intVector(v):
   return (*map(int, map(round, v)),)
@@ -33,6 +33,14 @@ class Player:
   @property
   def velocity(self):
     return self.angle * self.speed
+  
+  def input(self, key, keydown=True):
+    self.input = (op.or_ if keydown else op.xor)(self.input, key)
+  
+  def move(self):
+    # {1: (0, -1), 2: (0, 1), 4: (-1, 0), 8: (1, 0)}
+    self.input = 0
+
 
 screen.fill(background)
 pygame.display.flip()
@@ -51,8 +59,10 @@ while True:
     if event.type == KEYDOWN:
       if event.key == K_ESCAPE:
         pygame.event.post(pygame.event.Event(QUIT))
-      if event.key in directions:
-        player.input(event.key)
+      if event.key in moves:
+        player.input(moves[event.key])
+  
+  player.move()
   
   screen.blit(font.render(str(int(fps)), 0, foreground), (0,0))
   update_rects.append(pygame.rect.Rect((0,0), font.size(str(int(fps)))))
