@@ -14,59 +14,66 @@ background = Color(161, 161, 161)
 foreground = Color(255, 255, 255)
 screen = pygame.display.set_mode((0, 0), FULLSCREEN)
 screen_rect = screen.get_rect()
-update_rects = [[]]
 fps = 0
 
-moves = [(K_w, K_UP), (K_s, K_DOWN), (K_a, K_LEFT), (K_d, K_RIGHT)]
-moves = {key:2**i for i in range(len(moves)) for key in moves[i]}
+entities = pygame.sprite.Group()
+
+group_dict = lambda d:{i:v for k, v in d.items() for i in k}
+
+hold_moves = group_dict({(K_w, K_UP):"up", (K_s, K_DOWN):"down", (K_a, K_LEFT):"left", (K_d, K_RIGHT):"right"})
+toggle_moves = group_dict({})
 
 
-bitwise_any = partial(reduce, op._or)
-def intVector(v):
-  return (*map(int, map(round, v)),)
-
-
-class Flags:
-  def __init__(self, *flags):
-    self.flags = dict(zip(flags, (2**i for i in range(len(flags)))))
+class Player(pygame.sprite.Sprite):
+  directions = {"up":(0, -1), "down":(0, 1), "left":(-1, 0), "right":(1, 0)}
+  isstill = set(directions.keys()).isdisjoint
   
-  def __getattr__(self, name):
-    return self[name]
-  
-  def __getitem__(self, key):
-    # test if key is iterable
-    return self.flags[key]
-
-class Player:
   def __init__(self, pos, angle):
+    super().__init__(entities)
+    
     self.pos, self.angle = vector(pos), vector(1, 0).rotate(angle)
     self.speed = 0
-    self.top_speed = 12.5
+    self.accel = 1
+    self.max_speed = 12.5
+    self.input, self.prev_input = set(), set()
+    self.size = 50
+    self.base_image = pygame.Surface((self.size, self.size))
+    self.base_image.set_colorkey((0, 0, 0))
+    pygame.draw.aalines(self.base_image, foreground, 1, [(0, 0), (self.size, self.size/2), (0, self.size)])
   
   @property
   def velocity(self):
     return self.angle * self.speed
   
-  def input(self, key, keydown=True):
-    if keydown:
-      self.input |= key
-    else:
-      self.input &= ~key
+  def hold_input(self, key, keydown):
+    getattr(self.input, ("add" if keydown else "discard"))(key)
   
-  def move(self):
-    # {1: (0, -1), 2: (0, 1), 4: (-1, 0), 8: (1, 0)}
-    self.input = 0
-
-
-screen.fill(background)
-pygame.display.flip()
+  def toggle_input(self, key):
+    getattr(self.input, ("discard" if key in self.input else "add"))(key)
+  
+  def update(self):
+    if not self.isstill(self.input):
+      for dir_ in self.directions:
+        if dir_ in self.input:
+          self.angle += self.directions[dir_]
+      self.angle.normalize_ip()
+      self.speed += self.accel
+    else:
+      self.speed -= self.accel
+    
+    self.speed = min(max(self.speed, 0), self.max_speed)
+    self.pos += self.velocity
+    self.prev_input = self.input.copy()
+    
+    self.image = pygame.transform.rotate(self.base_image, vector().angle_to(self.angle))
+    self.rect = self.image.get_rect()
+    self.rect.center = self.pos
 
 player = Player((0, 0), -90)
 
 while True:
   clock.tick(60)
   fps = clock.get_fps()
-  update_rects = [update_rects[1:]]
   screen.fill(background)
   
   if pygame.event.get(QUIT):
@@ -75,12 +82,17 @@ while True:
     if event.type == KEYDOWN:
       if event.key == K_ESCAPE:
         pygame.event.post(pygame.event.Event(QUIT))
-      if event.key in moves:
-        player.input(moves[event.key])
+      elif event.key in hold_moves:
+        player.hold_input(hold_moves[event.key], 1)
+    elif event.type == KEYUP:
+      if event.key in hold_moves:
+        player.hold_input(hold_moves[event.key], 0)
+      elif event.key in toggle_moves:
+        player.toggle_input(toggle_moves[event.key])
   
-  player.move()
+  entities.update()
+  entities.draw(screen)
   
-  screen.blit(font.render(str(int(fps)), 0, foreground), (0,0))
-  update_rects.append(pygame.rect.Rect((0,0), font.size(str(int(fps)))))
-  pygame.display.update(update_rects[0]+update_rects[1:])
+  screen.blit(font.render(str(int(fps)), 0, foreground), (0, 0))
+  pygame.display.flip()
 pygame.quit()
