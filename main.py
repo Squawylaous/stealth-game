@@ -39,13 +39,13 @@ class Player(pygame.sprite.Sprite):
     self.accel = 1
     self.max_speed = 5
     self.input, self.prev_input = set(), set()
-    self.size = 50
-    self.base_image = pygame.Surface((self.size, self.size))
+    self.size = 37.5
+    self.base_image = pygame.Surface((self.size*1.5, self.size*1.5))
     self.base_image.fill(background)
     self.base_image.set_colorkey(background)
-    triangle = [(0, self.size*.875), (self.size*.25, self.size/2), (0, self.size*.125), (self.size, self.size/2)]
+    triangle = (lambda size:[(0, size*.875), (size*.25, size/2), (0, size*.125), (size, size/2)])(self.size*1.5)
     pygame.draw.polygon(self.base_image, foreground, triangle)
-    pygame.draw.polygon(self.base_image, (0, 0, 0), triangle, 3)
+    pygame.draw.polygon(self.base_image, (0, 0, 0), triangle, 5)
   
   @property
   def velocity(self):
@@ -78,14 +78,18 @@ class Player(pygame.sprite.Sprite):
 
 
 class Level(pygame.sprite.Sprite):
-  def __init__(self, size, *walls):
+  def __init__(self, size, walls):
+    super().__init__()
+    
     self.size = vector(size, size)
+    self.rect = pygame.rect.Rect((0, 0), self.size)
     self.image = pygame.Surface(self.size)
     self.image.fill(background)
-    self.image.set_colorkey(background)
-    pygame.draw.rect(self.image, (0, 0, 0), ((0, 0), self.size), 10)
     
     self.walls = [*map(partial(Wall, self), walls)]
+    
+  def update(self, player):
+    self.rect.topleft = -player.pos + screen_rect.center
 
 
 class Wall():
@@ -96,17 +100,13 @@ class Wall():
 
 
 player = Player((400, 400), -90)
-lvl1 = Level(2000)
+lvl1 = Level(2000, [(100, 100, 200, 200), (500, 100, 200, 200), (100, 500, 200, 200), (500, 500, 200, 200)])
 LvlGroup.sprite = lvl1
-Wall((100, 100, 200, 200))
-Wall((500, 100, 200, 200))
-Wall((100, 500, 200, 200))
-Wall((500, 500, 200, 200))
 
 while True:
   clock.tick(60)
   fps = clock.get_fps()
-  screen.fill(background)
+  screen.fill((0, 0, 0))
   
   if pygame.event.get(QUIT):
     break
@@ -123,9 +123,8 @@ while True:
         player.toggle_input(toggle_moves[event.key])
   
   
-  LvlGroup.update()
+  LvlGroup.update(player)
   LvlGroup.draw(screen)
-  screen.blit(lvl1.surface, -player.pos + screen_rect.center)
   Entities.update()
   Entities.draw(screen)
   
