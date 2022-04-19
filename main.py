@@ -16,10 +16,11 @@ screen = pygame.display.set_mode((0, 0), FULLSCREEN)
 screen_rect = screen.get_rect()
 fps = 0
 
+Flags = {"move":False}
 Entities = pygame.sprite.Group()
-Walls_surface = pygame.Surface((2000, 2000), flags=SRCALPHA)
-Walls_surface.fill((0, 0, 0, 0))
+LvlGroup = pygame.sprite.GroupSingle()
 
+post_event = lambda e:pygame.event.post(pygame.event.Event(e))
 group_dict = lambda d:{i:v for k, v in d.items() for i in k}
 
 hold_moves = group_dict({(K_w, K_UP):"up", (K_s, K_DOWN):"down", (K_a, K_LEFT):"left", (K_d, K_RIGHT):"right"})
@@ -76,14 +77,27 @@ class Player(pygame.sprite.Sprite):
     self.rect.center = screen_rect.center
 
 
-class Wall():
-  def __init__(self, rect):
+class Level(pygame.sprite.Sprite):
+  def __init__(self, size, *walls):
+    self.size = vector(size, size)
+    self.image = pygame.Surface(self.size)
+    self.image.fill(background)
+    self.image.set_colorkey(background)
+    pygame.draw.rect(self.image, (0, 0, 0), ((0, 0), self.size), 10)
     
+    self.walls = [*map(partial(Wall, self), walls)]
+
+
+class Wall():
+  def __init__(self, lvl, rect):
+    self.lvl = lvl
     self.rect = pygame.rect.Rect(rect)
-    pygame.draw.rect(Walls_surface, foreground, self.rect)
+    pygame.draw.rect(self.lvl.image, foreground, self.rect)
 
 
 player = Player((400, 400), -90)
+lvl1 = Level(2000)
+LvlGroup.sprite = lvl1
 Wall((100, 100, 200, 200))
 Wall((500, 100, 200, 200))
 Wall((100, 500, 200, 200))
@@ -108,7 +122,10 @@ while True:
       elif event.key in toggle_moves:
         player.toggle_input(toggle_moves[event.key])
   
-  screen.blit(Walls_surface, -player.pos + screen_rect.center)
+  
+  LvlGroup.update()
+  LvlGroup.draw(screen)
+  screen.blit(lvl1.surface, -player.pos + screen_rect.center)
   Entities.update()
   Entities.draw(screen)
   
