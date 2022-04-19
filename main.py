@@ -18,13 +18,27 @@ fps = 0
 
 Flags = {"move":False}
 Entities = pygame.sprite.Group()
-LvlGroup = pygame.sprite.GroupSingle()
+LvlGroup = None
 
 post_event = lambda e:pygame.event.post(pygame.event.Event(e))
 group_dict = lambda d:{i:v for k, v in d.items() for i in k}
 
 hold_moves = group_dict({(K_w, K_UP):"up", (K_s, K_DOWN):"down", (K_a, K_LEFT):"left", (K_d, K_RIGHT):"right"})
 toggle_moves = group_dict({})
+
+def rect_circle_collide(cpos, csize, rect):
+  crect = pygame.rect.Rect((0 ,0), (csize*2, csize*2))
+  crect.center = cpos
+  if not rect.colliderect(crect):
+    return False
+  rcenter = vector(rect.center)
+  rdist = rcenter.distance_to(rect.topleft)
+  dist = rcenter.distance_to(cpos)
+  if rdict + csize > dist:
+    return False
+  if dist <= min(rect.width, rect.height) + csize:
+    return True
+  return rect.collidepoint(cpos + cpos.angle_to(rect.center)*csize)
 
 
 class Player(pygame.sprite.Sprite):
@@ -34,7 +48,10 @@ class Player(pygame.sprite.Sprite):
   def __init__(self, pos, angle):
     super().__init__(Entities)
     
+    self.prev_pos, self.prev_angle = vector(), vector()
+    
     self.pos, self.angle = vector(pos), vector(1, 0).rotate(angle)
+    self.prev_pos, self.prev_angle = self.pos, self.angle
     self.speed = 0
     self.accel = 1
     self.max_speed = 5
@@ -57,19 +74,20 @@ class Player(pygame.sprite.Sprite):
   def toggle_input(self, key):
     getattr(self.input, ("discard" if key in self.input else "add"))(key)
   
-  def update(self):
+  def update(self, walls):
     if not self.isstill(self.input):
       for dir_ in self.directions:
         if dir_ in self.input:
           self.angle += self.directions[dir_]
       if self.angle:
-        self.angle.normalize_ip()
+        self.prev_angle, self.angle = self.angle, self.angle.normalize()
       self.speed += self.accel
     else:
       self.speed -= self.accel
+    self.velocity = self.angle * self.speed
     
     self.speed = min(max(self.speed, 0), self.max_speed)
-    self.pos += self.velocity
+    self.prev_pos, self.pos = self.pos, self.pos + self.velocity
     self.prev_input = self.input.copy()
     
     self.image = pygame.transform.rotate(self.base_image, -vector().angle_to(self.angle))
@@ -77,31 +95,32 @@ class Player(pygame.sprite.Sprite):
     self.rect.center = screen_rect.center
 
 
-class Level(pygame.sprite.Sprite):
+class Level(pygame.sprite.Group):
   def __init__(self, size, walls):
     super().__init__()
     
     self.size = vector(size, size)
-    self.rect = pygame.rect.Rect((0, 0), self.size)
-    self.image = pygame.Surface(self.size)
-    self.image.fill(background)
+    self.background = Wall(self, ((0, 0), self.size), fill=background)
     
     self.walls = [*map(partial(Wall, self), walls)]
+
+
+class Wall(pygame.sprite.Sprite):
+  def __init__(self, lvl, rect, *, fill=foreground):
+    super().__init__(lvl)
     
-  def update(self, player):
-    self.rect.topleft = -player.pos + screen_rect.center
-
-
-class Wall():
-  def __init__(self, lvl, rect):
     self.lvl = lvl
-    self.rect = pygame.rect.Rect(rect)
-    pygame.draw.rect(self.lvl.image, foreground, self.rect)
+    self.base_rect = pygame.rect.Rect(rect)
+    self.image = pygame.Surface(self.base_rect.size)
+    self.image.fill(fill)
+  
+  def update(self, pos):
+    self.rect = self.base_rect.move(-pos + screen_rect.center)
 
 
 player = Player((400, 400), -90)
 lvl1 = Level(2000, [(100, 100, 200, 200), (500, 100, 200, 200), (100, 500, 200, 200), (500, 500, 200, 200)])
-LvlGroup.sprite = lvl1
+LvlGroup = lvl1
 
 while True:
   clock.tick(60)
@@ -123,11 +142,12 @@ while True:
         player.toggle_input(toggle_moves[event.key])
   
   
-  LvlGroup.update(player)
+  LvlGroup.update(player.pos)
   LvlGroup.draw(screen)
-  Entities.update()
+  Entities.update(LvlGroup.walls)
   Entities.draw(screen)
   
   screen.blit(font.render(str(int(fps)), 0, foreground), (0, 0))
+  screen.blit(font.render(str(int(player.collided)), 0, foreground), (50, 0))
   pygame.display.flip()
 pygame.quit()
