@@ -16,7 +16,9 @@ screen = pygame.display.set_mode((0, 0), FULLSCREEN)
 screen_rect = screen.get_rect()
 fps = 0
 
-entities = pygame.sprite.Group()
+Entities = pygame.sprite.Group()
+Walls_surface = pygame.Surface((2000, 2000), flags=SRCALPHA)
+Walls_surface.fill((0, 0, 0, 0))
 
 group_dict = lambda d:{i:v for k, v in d.items() for i in k}
 
@@ -29,17 +31,20 @@ class Player(pygame.sprite.Sprite):
   isstill = set(directions.keys()).isdisjoint
   
   def __init__(self, pos, angle):
-    super().__init__(entities)
+    super().__init__(Entities)
     
     self.pos, self.angle = vector(pos), vector(1, 0).rotate(angle)
     self.speed = 0
     self.accel = 1
-    self.max_speed = 12.5
+    self.max_speed = 5
     self.input, self.prev_input = set(), set()
     self.size = 50
     self.base_image = pygame.Surface((self.size, self.size))
-    self.base_image.set_colorkey((0, 0, 0))
-    pygame.draw.aalines(self.base_image, foreground, 1, [(0, 0), (self.size, self.size/2), (0, self.size)])
+    self.base_image.fill(background)
+    self.base_image.set_colorkey(background)
+    triangle = [(0, self.size*.875), (self.size*.25, self.size/2), (0, self.size*.125), (self.size, self.size/2)]
+    pygame.draw.polygon(self.base_image, foreground, triangle)
+    pygame.draw.polygon(self.base_image, (0, 0, 0), triangle, 3)
   
   @property
   def velocity(self):
@@ -56,7 +61,8 @@ class Player(pygame.sprite.Sprite):
       for dir_ in self.directions:
         if dir_ in self.input:
           self.angle += self.directions[dir_]
-      self.angle.normalize_ip()
+      if self.angle:
+        self.angle.normalize_ip()
       self.speed += self.accel
     else:
       self.speed -= self.accel
@@ -65,11 +71,23 @@ class Player(pygame.sprite.Sprite):
     self.pos += self.velocity
     self.prev_input = self.input.copy()
     
-    self.image = pygame.transform.rotate(self.base_image, vector().angle_to(self.angle))
+    self.image = pygame.transform.rotate(self.base_image, -vector().angle_to(self.angle))
     self.rect = self.image.get_rect()
-    self.rect.center = self.pos
+    self.rect.center = screen_rect.center
 
-player = Player((0, 0), -90)
+
+class Wall():
+  def __init__(self, rect):
+    
+    self.rect = pygame.rect.Rect(rect)
+    pygame.draw.rect(Walls_surface, foreground, self.rect)
+
+
+player = Player((400, 400), -90)
+Wall((100, 100, 200, 200))
+Wall((500, 100, 200, 200))
+Wall((100, 500, 200, 200))
+Wall((500, 500, 200, 200))
 
 while True:
   clock.tick(60)
@@ -90,8 +108,9 @@ while True:
       elif event.key in toggle_moves:
         player.toggle_input(toggle_moves[event.key])
   
-  entities.update()
-  entities.draw(screen)
+  screen.blit(Walls_surface, -player.pos + screen_rect.center)
+  Entities.update()
+  Entities.draw(screen)
   
   screen.blit(font.render(str(int(fps)), 0, foreground), (0, 0))
   pygame.display.flip()
