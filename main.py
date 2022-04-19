@@ -27,18 +27,24 @@ hold_moves = group_dict({(K_w, K_UP):"up", (K_s, K_DOWN):"down", (K_a, K_LEFT):"
 toggle_moves = group_dict({})
 
 def rect_circle_collide(cpos, csize, rect):
-  crect = pygame.rect.Rect((0 ,0), (csize*2, csize*2))
-  crect.center = cpos
-  if not rect.colliderect(crect):
+  if not rect.colliderect((cpos - (csize, csize), (csize*2, csize*2))):
     return False
-  rcenter = vector(rect.center)
-  rdist = rcenter.distance_to(rect.topleft)
-  dist = rcenter.distance_to(cpos)
-  if rdict + csize > dist:
-    return False
-  if dist <= min(rect.width, rect.height) + csize:
+  if rect.collidepoint(cpos):
     return True
-  return rect.collidepoint(cpos + cpos.angle_to(rect.center)*csize)
+  rect_points = [vector(getattr(rect, i)) for i in ("topleft", "topright", "bottomright", "bottomleft")]
+  for point in rect_points:
+    if cpos.distance_squared_to(point) <= csize*csize:
+      return True
+  for p1, p2 in zip(rect_points, [*rect_points[1:], rect_points[0]]):
+    point = vector()
+    if p1 == p2:
+      value = -1
+    else:
+      value = ((cpos - p1)*(p2 - p1))/p1.distance_squared_to(p2)
+    value = max(min(value, 1), 0)
+    if cpos.distance_squared_to(p1.lerp(p2, value)) <= csize*csize:
+      return True
+  return False
 
 
 class Player(pygame.sprite.Sprite):
@@ -48,19 +54,18 @@ class Player(pygame.sprite.Sprite):
   def __init__(self, pos, angle):
     super().__init__(Entities)
     
-    self.prev_pos, self.prev_angle = vector(), vector()
-    
+    self.prev_pos = vector()
     self.pos, self.angle = vector(pos), vector(1, 0).rotate(angle)
     self.prev_pos, self.prev_angle = self.pos, self.angle
     self.speed = 0
     self.accel = 1
     self.max_speed = 5
     self.input, self.prev_input = set(), set()
-    self.size = 37.5
-    self.base_image = pygame.Surface((self.size*1.5, self.size*1.5))
+    self.size = 12.5
+    self.base_image = pygame.Surface((self.size*4, self.size*4))
     self.base_image.fill(background)
     self.base_image.set_colorkey(background)
-    triangle = (lambda size:[(0, size*.875), (size*.25, size/2), (0, size*.125), (size, size/2)])(self.size*1.5)
+    triangle = (lambda size:[(0, size*.875), (size*.25, size/2), (0, size*.125), (size, size/2)])(self.size*4)
     pygame.draw.polygon(self.base_image, foreground, triangle)
     pygame.draw.polygon(self.base_image, (0, 0, 0), triangle, 5)
   
@@ -80,15 +85,30 @@ class Player(pygame.sprite.Sprite):
         if dir_ in self.input:
           self.angle += self.directions[dir_]
       if self.angle:
-        self.prev_angle, self.angle = self.angle, self.angle.normalize()
+        self.angle.normalize_ip()
       self.speed += self.accel
     else:
       self.speed -= self.accel
-    self.velocity = self.angle * self.speed
     
     self.speed = min(max(self.speed, 0), self.max_speed)
     self.prev_pos, self.pos = self.pos, self.pos + self.velocity
     self.prev_input = self.input.copy()
+    
+    for wall in walls:
+      if rect_circle_collide(self.pos, self.size, wall.rect):
+        if abs(self.pos.x-wall.rect.centerx) * wall.rect.h >\
+           abs(self.pos.y-wall.rect.centery) * wall.rect.w:
+          if self.pos.x <= wall.rect.centerx:
+            self.pos.x = wall.rect.left - self.size
+          else:
+            self.pos.x = wall.rect.right + self.size
+        else:
+          if self.pos.y <= wall.rect.centery:
+            self.pos.y = wall.rect.top - self.size
+          else:
+            self.pos.y = wall.rect.bottom + self.size
+    self.pos.x = max(min(self.pos.x, LvlGroup.size.x-self.size), self.size)
+    self.pos.y = max(min(self.pos.y, LvlGroup.size.y-self.size), self.size)
     
     self.image = pygame.transform.rotate(self.base_image, -vector().angle_to(self.angle))
     self.rect = self.image.get_rect()
@@ -98,24 +118,30 @@ class Player(pygame.sprite.Sprite):
 class Level(pygame.sprite.Group):
   def __init__(self, size, walls):
     super().__init__()
-    
     self.size = vector(size, size)
-    self.background = Wall(self, ((0, 0), self.size), fill=background)
-    
+    self.background = LvlBackground(self, self.size)
     self.walls = [*map(partial(Wall, self), walls)]
 
 
-class Wall(pygame.sprite.Sprite):
-  def __init__(self, lvl, rect, *, fill=foreground):
+class LvlBackground(pygame.sprite.Sprite):
+  def __init__(self, lvl, size, *, fill=background):
     super().__init__(lvl)
-    
-    self.lvl = lvl
-    self.base_rect = pygame.rect.Rect(rect)
-    self.image = pygame.Surface(self.base_rect.size)
+    self.size = size
+    self.image = pygame.Surface(self.size)
     self.image.fill(fill)
   
   def update(self, pos):
-    self.rect = self.base_rect.move(-pos + screen_rect.center)
+    self.rect = pygame.rect.Rect((-pos + screen_rect.center), self.size)
+
+
+class Wall():
+  def __init__(self, lvl, rect, *, fill=foreground):
+    
+    self.lvl = lvl
+    self.rect = pygame.rect.Rect(rect)
+    self.image = pygame.Surface(self.rect.size)
+    self.image.fill(fill)
+    self.lvl.background.image.blit(self.image, self.rect.topleft)
 
 
 player = Player((400, 400), -90)
@@ -148,6 +174,5 @@ while True:
   Entities.draw(screen)
   
   screen.blit(font.render(str(int(fps)), 0, foreground), (0, 0))
-  screen.blit(font.render(str(int(player.collided)), 0, foreground), (50, 0))
   pygame.display.flip()
 pygame.quit()
